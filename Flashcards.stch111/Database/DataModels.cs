@@ -16,4 +16,18 @@ namespace FlashCards.stch111.Database
     {
         public string Name { get; set; }
     }
+
+    public class FlashCard
+    {
+        public int ID { get; set; }
+        public string Front { get; set; }
+        public string Back { get; set; }
+        public int StackID { get; set; }
+    }
+
+    public class FlashCardDTO
+    {
+        public string Front { get; set; }
+        public string Back { get; set; }
+    }
 }

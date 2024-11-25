@@ -15,74 +15,178 @@ namespace FlashCards.stch111
         { 
             string connectionString = GetConnectionString();
 
-            using (SqlConnection connection = new SqlConnection())
+            try
             {
-                connection.ConnectionString = connectionString;
-                connection.Open();
+                using (SqlConnection connection = new SqlConnection())
+                {
+                    connection.ConnectionString = connectionString;
+                    connection.Open();
 
-                try
-                {
-                    // Run initial batch of commands to create database and tables if they do not yet exist
-                    string[] initialCommands = [
-                        "IF DB_ID('FlashCardsDB') IS NULL CREATE DATABASE FlashCardsDB;",
-                        "USE FlashCardsDB;",
-                        "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Stacks')\r\n\tCREATE TABLE Stacks(\r\n\t\tID INT IDENTITY(1,1) PRIMARY KEY, \r\n\t\tName VARCHAR(255) UNIQUE\r\n\t\t);",
-                        "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='FlashCards')\r\n\tCREATE TABLE FlashCards(\r\n\t\tID INT NOT NULL PRIMARY KEY,\r\n\t\tQuestion VARCHAR(255),\r\n\t\tAnswer VARCHAR(255),\r\n\t\tStackID int FOREIGN KEY REFERENCES Stacks(ID)\r\n\t\t);"
-                    ];
-                    foreach (var commandText in initialCommands)
-                    {
-                        using (SqlCommand command = new SqlCommand(commandText, connection))
+                        // Run initial batch of commands to create database and tables if they do not yet exist
+                        string[] initialCommands = [
+                            "IF DB_ID('FlashCardsDB') IS NULL CREATE DATABASE FlashCardsDB;",
+                            "USE FlashCardsDB;",
+                            "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='Stacks')\r\n\tCREATE TABLE Stacks(\r\n\t\tID INT IDENTITY(1,1) PRIMARY KEY, \r\n\t\tName VARCHAR(255) UNIQUE\r\n\t\t);",
+                            "IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME='FlashCards')\r\n\tCREATE TABLE FlashCards(\r\n\t\tID INT IDENTITY(1,1) PRIMARY KEY,\r\n\t\tFront VARCHAR(255),\r\n\t\tBack VARCHAR(255),\r\n\t\tStackID int FOREIGN KEY REFERENCES Stacks(ID)\r\n\t\t);"
+                        ];
+                        foreach (var commandText in initialCommands)
                         {
-                            command.ExecuteNonQuery();
+                            using (SqlCommand command = new SqlCommand(commandText, connection))
+                            {
+                                command.ExecuteNonQuery();
+                            }
                         }
-                    }
                 }
-                catch (Exception ex)
-                {
-                    Console.Clear();
-                    Console.WriteLine(ex.Message);
-                    Environment.Exit(0);
-                }
+            }
+            catch (Exception ex)
+            {
+                Console.Clear();
+                Console.WriteLine(ex.Message);
+                Console.ReadKey();
+                Environment.Exit(0);
             }
         }
 
-        public List<StackDTO> GetStacks()
+        public List<Stack> GetStacks()
         {
             string connectionString = GetConnectionString();
 
-            List<StackDTO> stacks = new List<StackDTO>();
+            List<Stack> stacks = new List<Stack>();
 
-            using (SqlConnection connection = new SqlConnection())
+            try
             {
-                connection.ConnectionString = connectionString;
-                connection.Open();
-                try
+                using (SqlConnection connection = new SqlConnection())
+                using (SqlCommand useDbCommand = new SqlCommand("USE FlashCardsDB;", connection))
+                using (SqlCommand selectCommand = new SqlCommand("SELECT ID, Name FROM stacks ORDER BY Name;", connection))
                 {
-                    SqlCommand useDbCommand = new SqlCommand("USE FlashCardsDB;", connection);
+                    connection.ConnectionString = connectionString;
+                    connection.Open();
                     useDbCommand.ExecuteNonQuery();
-                    
-                    using (SqlCommand command = new SqlCommand("SELECT Name FROM stacks ORDER BY Name;", connection))
+                    SqlDataReader reader = selectCommand.ExecuteReader();
+                    while (reader.Read())
                     {
-                        SqlDataReader reader = command.ExecuteReader();
-                        while (reader.Read())
+                        int id = reader.GetInt32(0);
+                        string name = reader.GetString(1);
+                        stacks.Add(new Stack
                         {
-                            string name = reader.GetString(0);
-                            stacks.Add(new StackDTO
-                            {
-                                Name = name
-                            });
-                        }
+                            ID = id,
+                            Name = name
+                        });
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.Clear();
-                    Console.WriteLine(ex.Message);
-                }
-                return stacks;
             }
+            catch (Exception ex)
+            {
+                Console.Clear();
+                Console.WriteLine(ex.Message);
+                Console.ReadKey();
+            }
+            return stacks;
         }
 
+        public List<FlashCardDTO> GetFlashCards(int stackID)
+        {
+            string connectionString = GetConnectionString();
+            List<FlashCardDTO> flashCards = new List<FlashCardDTO>();
+            try
+            {
+                using (SqlConnection connection = new SqlConnection())
+                using (SqlCommand useDbCommand = new SqlCommand("USE FlashCardsDB;", connection))
+                using (SqlCommand selectCommand = new SqlCommand("SELECT Front, Back FROM FlashCards WHERE StackID=@StackID;", connection))
+                {
+                    connection.ConnectionString = connectionString;
+                    connection.Open();                    
+                    useDbCommand.ExecuteNonQuery();
+                    selectCommand.Parameters.Add(new SqlParameter("@StackID", stackID));
+                    SqlDataReader reader = selectCommand.ExecuteReader();
+                    while (reader.Read())
+                    {
+                        flashCards.Add(new FlashCardDTO
+                        {
+                            Front = reader.GetString(0),
+                            Back = reader.GetString(1),
+                        });
+                    }
+
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Clear();
+                Console.WriteLine(ex.Message);
+                Console.ReadKey();
+            }
+            return flashCards;
+        }
+
+        public int CreateFlashCard(FlashCardDTO flashCardDTO, int stackID)
+        {
+            string connectionString = GetConnectionString();
+
+            List<FlashCardDTO> flashCards = new List<FlashCardDTO>();
+
+            int rowsAffected = -1; // Default
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection())
+                using (SqlCommand useDbCommand = new SqlCommand("USE FlashCardsDB;", connection))
+                using (SqlCommand insertCommand = new SqlCommand("INSERT INTO FlashCards (Front, Back, StackID) VALUES (@Front, @Back, @StackID)", connection))
+                {
+                    connection.ConnectionString = connectionString;
+                    connection.Open();
+                    useDbCommand.ExecuteNonQuery();
+                    insertCommand.Parameters.Add(new SqlParameter("@Front", flashCardDTO.Front));
+                    insertCommand.Parameters.Add(new SqlParameter("@Back", flashCardDTO.Back));
+                    insertCommand.Parameters.Add(new SqlParameter("@StackID", stackID));
+                    rowsAffected = insertCommand.ExecuteNonQuery();
+                    if (rowsAffected <= 0)
+                    {
+                        throw new Exception("Error inserting row(s) into SQL table.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Clear();
+                Console.WriteLine(ex.Message);
+                Console.ReadKey();
+            }
+
+            return rowsAffected;
+        }
+
+        public int CreateStack(string stackName)
+        {
+            string connectionString = GetConnectionString();
+            int rowsAffected = -1; // Default
+
+            try
+            {
+                using (SqlConnection connection = new SqlConnection())
+                using (SqlCommand useDbCommand = new SqlCommand("USE FlashCardsDB;", connection))
+                using (SqlCommand insertCommand = new SqlCommand("INSERT INTO Stacks (Name) VALUES (@Name)", connection))
+                {
+                    connection.ConnectionString = connectionString;
+                    connection.Open();
+                    useDbCommand.ExecuteNonQuery();
+                    insertCommand.Parameters.Add(new SqlParameter("@Name", stackName));
+                    rowsAffected = insertCommand.ExecuteNonQuery();
+                    if (rowsAffected <= 0)
+                    {
+                        throw new Exception("Error inserting row(s) into SQL table.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Clear();
+                Console.WriteLine(ex.Message);
+                Console.ReadKey();
+            }
+
+            return rowsAffected;
+        }
         private string GetConnectionString()
         {
             return "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=master;Integrated Security=True;Connect Timeout=30;Encrypt=False;Trust Server Certificate=False;Application Intent=ReadWrite;Multi Subnet Failover=False";
